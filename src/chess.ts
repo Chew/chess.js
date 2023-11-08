@@ -65,6 +65,7 @@ type InternalMove = {
   captured?: PieceSymbol
   promotion?: PieceSymbol
   flags: number
+  clock?: number
 }
 
 interface History {
@@ -89,6 +90,7 @@ export type Move = {
   lan: string
   before: string
   after: string
+  clock?: number
 }
 
 const EMPTY = -1
@@ -537,6 +539,7 @@ export class Chess {
   private _moveNumber = 0
   private _history: History[] = []
   private _comments: Record<string, string> = {}
+  private _clocks: Record<string, number> = {}
   private _castling: Record<Color, number> = { w: 0, b: 0 }
   private _positionCounts: Record<string, number> = {}
 
@@ -781,7 +784,7 @@ export class Chess {
       this._updateEnPassantSquare()
       this._updateSetup(this.fen())
       return true
-    } 
+    }
     return false
   }
 
@@ -1486,7 +1489,7 @@ export class Chess {
       const prettyMove = this._makePretty(move)
       this._positionCounts[prettyMove.after]--
       return prettyMove
-    }    
+    }
     return null
   }
 
@@ -1853,6 +1856,30 @@ export class Chess {
       }
     }
 
+    function parseClock(comment: string) {
+      // match [%clk 0:09:50.7] -> we'll return 590,700 (ms)
+      const clockRegex = /(\[%clk\s*([\d:.]+)])/
+      const results = clockRegex.exec(comment)
+      if (!results) {
+        return undefined
+      }
+
+      const clockString = results[2]
+      const clockParts = clockString.split(':')
+      let ms = 0
+      if (clockParts.length === 3) {
+        ms += Number(clockParts[0]) * 60 * 60 * 1000
+        ms += Number(clockParts[1]) * 60 * 1000
+        ms += Number(clockParts[2]) * 1000
+      } else if (clockParts.length === 2) {
+        ms += Number(clockParts[0]) * 60 * 1000
+        ms += Number(clockParts[1]) * 1000
+      } else if (clockParts.length === 1) {
+        ms += Number(clockParts[0]) * 1000
+      }
+      return ms
+    }
+
     // delete header to get the moves
     let ms = pgn
       .replace(headerString, '')
@@ -1892,8 +1919,15 @@ export class Chess {
 
     for (let halfMove = 0; halfMove < moves.length; halfMove++) {
       const comment = decodeComment(moves[halfMove])
+      let clock: number | undefined = undefined
       if (comment !== undefined) {
         this._comments[this.fen()] = comment
+        if (comment.includes('[%clk')) {
+          clock = parseClock(comment)
+          if (clock !== undefined) {
+            this._clocks[this.fen()] = clock
+          }
+        }
         continue
       }
 
@@ -2157,7 +2191,7 @@ export class Chess {
 
   // pretty = external move object
   private _makePretty(uglyMove: InternalMove): Move {
-    const { color, piece, from, to, flags, captured, promotion } = uglyMove
+    const { color, piece, from, to, flags, captured, promotion, clock } = uglyMove
 
     let prettyFlags = ''
 
@@ -2185,6 +2219,7 @@ export class Chess {
     // generate the FEN for the 'after' key
     this._makeMove(uglyMove)
     move.after = this.fen()
+    move.clock = this._clocks[move.after]
     this._undoMove()
 
     if (captured) {

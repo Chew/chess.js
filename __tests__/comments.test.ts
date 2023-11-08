@@ -1,4 +1,5 @@
 import { Chess } from '../src/chess'
+import { fileToString } from './utils'
 
 describe('Manipulate Comments', () => {
   it('no comments', () => {
@@ -125,6 +126,16 @@ describe('Manipulate Comments', () => {
       { fen: chess.fen(), comment: 'positional' },
     ])
     expect(chess.pgn()).toEqual('1. d4 {positional}')
+  })
+
+  it('checks to see if time are comments', () => {
+    const chess = new Chess()
+    // load 4.pgn from the pgn folder
+    const pgn = fileToString('./pgn/4.pgn')
+    chess.loadPgn(pgn)
+
+    const history = chess.history({ verbose: true })
+    expect(history[0].clock).toEqual(590700)
   })
 
   it('clear comments', () => {
